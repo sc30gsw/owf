@@ -8,7 +8,7 @@
       "name": "owf",
       "source": "./",
       "description": "Outline-driven WorkFlow — a 3-phase development workflow (outline, implement, review) with adversarial critic loops. \"Work is 90% outline.\" Minimal artifacts, zero external dependencies.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "sc30gsw"
       },
