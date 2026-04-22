@@ -1,0 +1,68 @@
+# Outline: {TITLE}
+
+<!-- slug: {SLUG} | created: {TIMESTAMP} | owf: v1.0.0 -->
+
+## Context
+<!-- Why is this task needed? Background and motivation. 2-3 sentences max. -->
+
+## Goal / Acceptance Criteria
+<!-- What "done" looks like. Each criterion must have a clear pass/fail definition. -->
+- [ ]
+
+## Out of Scope
+<!-- Explicitly list what this change does NOT include. Prevents scope creep. -->
+-
+
+## Change Surface
+<!-- Expected files / feature directories to change. Use actual project structure. -->
+```
+src/
+├── features/
+│   └── {feature-name}/
+│       ├── api/
+│       ├── components/
+│       ├── hooks/
+│       └── __tests__/
+```
+
+## Steps (TDD: RED → GREEN → REFACTOR)
+<!-- Each step must be independently testable. Order matters — dependencies first. -->
+<!-- Format: step N covers acceptance criterion N from above. -->
+
+1. **Write failing test(s) for** ...
+   - Test: `describe("...", () => { it("should ...", () => { ... }) })`
+   - Expected failure: ...
+
+2. **Implement** ... to make tests pass
+   - File: `src/features/.../`
+   - Key logic: ...
+
+3. **Refactor**: ...
+
+## Existing Code to Reuse
+<!-- Specific file paths found in the codebase. Use grep/glob before filling this. -->
+<!-- Do not leave this empty — if nothing reusable exists, explicitly state why. -->
+- `src/utils/...` — used for ...
+- `src/hooks/...` — pattern to follow for ...
+
+## Risks / Assumptions / Rollback
+<!-- All assumptions made. Edge cases. Dependencies. What to do if this breaks. -->
+- Assumption: ...
+- Risk: ...
+- Edge case: ...
+- Rollback: revert commit `git revert HEAD`
+
+## Verification
+<!-- Concrete commands + manual steps to confirm completion. -->
+- [ ] `npm test` — all pass (N expected)
+- [ ] `tsc --noEmit` — 0 errors
+- [ ] Coverage ≥ 80%
+- [ ] Manual: navigate to ..., confirm ...
+
+## Questions for Reviewer
+<!-- Design decisions, trade-offs, or specific concerns for code review. -->
+<!-- This section is pre-filled by owf-outline-critic when score < 100. -->
+-
+
+---
+<!-- owf-outline-critic score: {SCORE}/100 ({BAND}) after {ITER} iteration(s) -->
