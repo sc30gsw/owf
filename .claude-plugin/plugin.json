@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Outline-driven WorkFlow — 3-phase development workflow: outline, implement, review. Minimal artifacts, maximum quality.",
   "author": {"name": "sc30gsw"},
+  "homepage": "https://github.com/sc30gsw/owf",
+  "repository": "https://github.com/sc30gsw/owf",
   "license": "MIT",
-  "keywords": ["workflow", "outline", "tdd", "review", "adversarial"],
-  "skills": "./skills/",
-  "agents": "./agents/"
+  "keywords": ["workflow", "outline", "tdd", "review", "adversarial"]
 }
