@@ -12,8 +12,8 @@
       "author": {
         "name": "sc30gsw"
       },
-      "homepage": "",
-      "repository": "",
+      "homepage": "https://github.com/sc30gsw/owf",
+      "repository": "https://github.com/sc30gsw/owf",
       "license": "MIT",
       "keywords": ["workflow", "outline", "tdd", "review", "adversarial", "japanese", "productivity"]
     }
