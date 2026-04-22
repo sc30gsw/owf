@@ -5,10 +5,14 @@
 3フェーズのシンプルな開発ワークフロー:
 
 ```
-Phase 1: /owf:outline  → outline.md (adversarial critic loop × max 3)
+Phase 1: /owf:outline  → outline.md (2並列 adversarial critic loop × max 3)
 Phase 2: /owf:implement → TDD 実装
-Phase 3: /owf:review   → adversarial reviewer/fixer loop × max 3 → pr.md
+Phase 3: /owf:review   → デュアルモード
+                         ├─ Outline Review: 2並列 critic のみ（単発・敵対的）
+                         └─ Implementation Review: /simplify + 2並列 reviewer + fixer loop × max 3 → pr.md
 ```
+
+`/owf:review` は git diff の有無から Outline Review / Implementation Review を自動判別します。
 
 ## インストール
 
@@ -45,7 +49,7 @@ Skills はオーケストレータとして動作し、内部でエージェン�
 1. プロジェクト言語を自動検出（`OWF_LANG` 環境変数 > `README.md` サンプリング > デフォルト `en`）
 2. `./outlines/<slug>/outline.md` を骨子テンプレートから作成
 3. `owf-outliner` (opus, effort: xhigh) がコードベースを調査し outline を記述
-4. `owf-outline-critic` (opus, effort: xhigh) が敵対的にレビューし Verdict を返却
+4. `owf-outline-critic` を **2体並列**で起動（Critic A: `clarity + decomposition`、Critic B: `risk + reuse`）し Verdict をマージ
 5. スコアに応じてループ継続または終了（最大3往復）
 
 **スコア分岐**：
@@ -91,25 +95,40 @@ Skills はオーケストレータとして動作し、内部でエージェン�
 
 ---
 
-### `/owf:review` — Phase 3: 実装レビュー
+### `/owf:review` — Phase 3: レビュー（デュアルモード）
 
 ```
 /owf:review ./outlines/<slug>/outline.md
 ```
 
-**何をするか**：実装を `outline.md` との整合性・コード品質・テスト品質の観点で adversarial にレビューし、`pr.md` を生成します。
+**何をするか**：2 つの明確に分離されたモードで動作します。
 
-**フロー**：
+| モード | 対象 | 使用エージェント | 特徴 |
+|---|---|---|---|
+| **Outline Review** | `outline.md` 単体の品質確認 | `owf-outline-critic` × 2 並列 | 敵対的のみ（`/simplify` なし、fixer なし、単発・ループなし） |
+| **Implementation Review** | 実装コードの `outline.md` への整合性・コード品質 | `owf-reviewer` × 2 並列 + `owf-fixer` | 敵対的 + `/simplify` 前処理 + 修正ループ（最大3回） |
+
+**モード自動判別**：`git diff --name-only` の結果に `outlines/**` 以外の変更ファイルがあれば Implementation Review、なければ Outline Review。
+
+**Outline Review フロー**：
+1. `outline.md` を読み込む
+2. `owf-outline-critic` を **2体並列**で起動（Critic A: `clarity + decomposition`、Critic B: `risk + reuse`）
+3. 両方の partial Verdict をマージ（スコア加算・findings 統合・band 算出）
+4. CLI に Score / Band / 根拠 / 指摘事項 / 次アクション を表示（pr.md 生成なし、ループなし）
+
+**Implementation Review フロー**：
 1. `outline.md` と `git diff` を収集
-2. Agent Teams で `owf-reviewer` (READ-ONLY) と `owf-fixer` を起動
-3. reviewer → fixer の往復ループ（最大3回）
-4. `./outlines/<slug>/pr.md` を生成
-5. CLI に Score / Band / 根拠 / 次アクション を表示
+2. **`/simplify` skill を実行**（初回のみ・`git diff` 対象ファイルに限定）— 機械的な整理を事前に済ませ、reviewer の判定精度を高める
+3. `owf-reviewer` を **2体並列**で起動（Reviewer A: `fidelity + tests`、Reviewer B: `simplify + maintain`）
+4. 両方の partial Verdict をマージ（スコア加算・findings 統合・band 算出）
+5. `owf-fixer` が RED 指摘を修正 → 再レビュー（最大3回）
+6. `./outlines/<slug>/pr.md` を生成
+7. CLI に Score / Band / 根拠 / 次アクション を表示
 
-**CLI 最終出力例**：
+**Implementation Review CLI 出力例**：
 ```
 ========================================
-OWF Review: ./outlines/add-debounce/outline.md
+OWF Implementation Review: ./outlines/add-debounce/outline.md
 ========================================
 スコア: 87 / 100
 バンド: 🟢 GREEN
@@ -124,6 +143,29 @@ OWF Review: ./outlines/add-debounce/outline.md
 次のアクション:
   1. pr.md を確認: ./outlines/add-debounce/pr.md
   2. gh pr create --body-file ./outlines/add-debounce/pr.md
+========================================
+```
+
+**Outline Review CLI 出力例**（単発・pr.md なし）：
+```
+========================================
+OWF Outline Review: ./outlines/add-debounce/outline.md
+========================================
+スコア: 82 / 100
+バンド: 🟢 GREEN
+----------------------------------------
+評価の根拠:
+  clarity        22/25: 完了条件が一文で読める
+  decomposition  20/25: ステップが RED→GREEN→REFACTOR で分解済み
+  risk           20/25: エッジケース列挙あり、ロールバック明記
+  reuse          20/25: 既存の useDebounce 参照あり
+----------------------------------------
+指摘事項:
+  [MED] ## Verification: 手動確認手順が抽象的 → 具体的な画面操作を記述
+  [LOW] ## Out of Scope: 英語と日本語が混在
+----------------------------------------
+次のアクション:
+  このまま `/owf:implement` に進めます。
 ========================================
 ```
 
@@ -171,9 +213,15 @@ OWF Review: ./outlines/add-debounce/outline.md
 |---|---|
 | モデル | opus (effort: xhigh) |
 | ツール | **Read, Grep, Glob のみ（Write/Edit なし）** |
-| フェーズ | Phase 1 |
+| フェーズ | Phase 1 / Phase 3 Outline Review モード |
 
-**役割**：`outline.md` の弱点・曖昧さ・欠落を徹底的に洗い出します。直接ファイルを編集する手段を物理的に持ちません（frontmatter の `tools:` で強制）。
+**役割**：`outline.md` の弱点・曖昧さ・欠落を徹底的に洗い出します。直接ファイルを編集する手段を物理的に持ちません（frontmatter の `tools:` で強制）。`/owf:outline` および `/owf:review`（Outline Review モード）からは **2体並列で起動**されます。
+
+**並列起動と axis focus**：
+- **Critic A** (`axis_focus: ["clarity", "decomposition"]`) — 構造観点。スコア 0–50。
+- **Critic B** (`axis_focus: ["risk", "reuse"]`) — 文脈観点。スコア 0–50。
+- orchestrator が両方の partial Verdict をマージして最終スコア（0–100）を算出。
+- `@owf-outline-critic` として単体起動する場合は `axis_focus` なしで全4軸（0–100）を採点。
 
 **採点軸（各 25 点）**：
 - `clarity` — ゴール・スコープ・完了条件が一文で読めるか
@@ -182,7 +230,8 @@ OWF Review: ./outlines/add-debounce/outline.md
 - `reuse` — 既存コードを参照し NIH していないか
 
 **厳格ルール**：
-- 初回レビューでは絶対に 85/100 を超えない
+- `axis_focus` あり: 初回レビューで担当2軸の合計 42/50 を超えない
+- `axis_focus` なし: 初回レビューで 85/100 を超えない
 - すべての指摘には具体的なセクション名または行番号が必須
 - 「全体的に良い」など曖昧な肯定はしない
 
@@ -232,7 +281,13 @@ to: owf-outliner / sections: [...]
 | ツール | **Read, Grep, Glob, Bash（read-only コマンドのみ）** |
 | フェーズ | Phase 3 |
 
-**役割**：実装が `outline.md` と 1:1 で整合しているかを徹底検証します。Write/Edit ツールを持たないため物理的にコードを変更できません。
+**役割**：実装が `outline.md` と 1:1 で整合しているかを徹底検証します。Write/Edit ツールを持たないため物理的にコードを変更できません。`/owf:review` からは **2体並列で起動**されます。
+
+**並列起動とaxis focus**：
+- **Reviewer A** (`axis_focus: ["fidelity", "tests"]`) — 正しさ観点。スコア 0–50。
+- **Reviewer B** (`axis_focus: ["simplify", "maintain"]`) — 品質観点。スコア 0–50。
+- orchestrator が両方の partial Verdict をマージして最終スコア（0–100）を算出。
+- `@owf-reviewer` として単体起動する場合は `axis_focus` なしで全4軸（0–100）を採点。
 
 **採点軸（各 25 点）**：
 - `fidelity` — outline の全完了条件が実装されているか、スコープ逸脱はないか
@@ -243,7 +298,8 @@ to: owf-outliner / sections: [...]
 **厳格ルール**：
 - 完了条件が1つでも未実装: `fidelity` ≤ 15/25 確定
 - カバレッジ < 80%: `tests` ≤ 10/25 確定
-- 初回レビューでは 85/100 を超えない
+- `axis_focus` あり: 初回レビューで担当2軸の合計 42/50 を超えない
+- `axis_focus` なし: 初回レビューで 85/100 を超えない
 
 ---
 
@@ -262,10 +318,11 @@ to: owf-outliner / sections: [...]
 - `[MED]` — 基本修正（スコープ拡張が不要なもの）
 - `[LOW]` — 軽微なら修正、スキップ時は理由を報告
 
-**simplify 観点を修正時に適用**：
+**simplify 観点を修正時に適用**（2回目以降のイテレーション）：
 - 修正するファイルで見つけた重複コード・型定義をついでに整理
 - 800行を超えたファイルは分割
 - 触れたコードの try-catch を Result パターンに変換
+- ※ 初回（iter=0）は `/simplify` skill による前処理が実施済みのため、機械的整理は既に完了
 
 **完了条件**：修正後に全テスト pass + 型チェッククリーン を確認してから報告
 
@@ -340,4 +397,4 @@ owf/
 
 ## 外部依存
 
-**なし。** このプラグインは Claude Code 組み込みツール（Read/Write/Edit/Bash/Task/TeamCreate）のみに依存します。他プラグイン（everything-claude-code、code-simplifier 等）は不要です。どのプロジェクトでも動作します。
+**Claude Code 組み込み `simplify` skill のみ。** Phase 3 (`/owf:review`) の冒頭で、グローバルスコープに存在する `simplify` skill を呼び出します。このスキルは Claude Code に標準搭載されており、追加インストールは不要です。他の外部プラグイン（everything-claude-code 等）への依存はありません。

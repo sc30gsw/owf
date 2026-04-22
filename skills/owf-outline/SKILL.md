@@ -121,23 +121,37 @@ Spawn the `owf-outliner` agent with:
 
 Wait for owf-outliner to complete. It will have written the filled outline.md.
 
-### Step 4 — Run owf-outline-critic (review)
+### Step 4 — Run owf-outline-critic (2 parallel critics)
 
 Read the current `./outlines/<slug>/outline.md` content.
 
-Spawn the `owf-outline-critic` agent with:
+Spawn **two `owf-outline-critic` agents in parallel** (single message, two Agent tool calls):
+
+**Critic A** — axis_focus: clarity + decomposition (structure):
 - The full content of outline.md
 - Current iteration number (start at 1)
+- Instruction: `axis_focus: ["clarity", "decomposition"]` — score only these 2 axes (total 0–50)
 
-Wait for owf-outline-critic to return. Its entire response is a Verdict block.
+**Critic B** — axis_focus: risk + reuse (context):
+- The full content of outline.md
+- Current iteration number (start at 1)
+- Instruction: `axis_focus: ["risk", "reuse"]` — score only these 2 axes (total 0–50)
 
-### Step 5 — Parse verdict and branch
+Wait for **both** critics to return their partial Verdict blocks before proceeding.
 
-Parse the Verdict block from the critic's response using these exact markers:
-- `score:` followed by an integer
-- `band:` followed by `RED`, `YELLOW`, or `GREEN`
+### Step 5 — Merge partial Verdicts, then parse and branch
 
-If parsing fails: treat score=0, band=RED.
+**Merge the two partial Verdicts from Critic A and B into one combined Verdict:**
+
+1. **Dimensions**: combine all 4 axis lines (A's clarity + decomposition, B's risk + reuse).
+2. **Score**: sum both `score:` values (A's 0–50 + B's 0–50 = merged 0–100).
+3. **Findings**: union of both Findings sections. Dedupe by `(section, severity-category)` — on collision keep the higher severity.
+4. **Routing sections**: union of both `sections:` lists.
+5. **Band**: derive from merged score using thresholds (GREEN ≥80, YELLOW 75–79, RED <75).
+
+If either partial Verdict is missing or malformed: treat that critic's contribution as score=0 for its 2 axes, and continue with the available findings. If both fail: treat merged score=0, band=RED.
+
+Parse merged `score:` and derived `band:`. Proceed to branching.
 
 **Branch by band:**
 
