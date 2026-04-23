@@ -130,7 +130,16 @@ OWF Rubric — <slug>
     - <phase3_summary_lines[2]>
   次のアクション:
     <if GREEN>: `gh pr create --body-file ./outlines/<slug>/pr.md`
-    <if YELLOW/RED>: 指摘を解消して `/owf:review ./outlines/<slug>/outline.md` を再実行
+    <if YELLOW>:
+      自動修正ループは GREEN/YELLOW に達したため停止。pr.md の `## Remaining Risks` を確認し、
+      受容できるなら `gh pr create --body-file ./outlines/<slug>/pr.md`、
+      追加修正が必要なら手動で対応してから `/owf:review ./outlines/<slug>/outline.md` を再実行。
+    <if RED>:
+      最大 3 イテレーションの自動修正でも < 75。自動修正では解決困難な構造的問題の可能性あり。
+      pr.md の `## Next Action Proposals` を確認し、
+      ① outline を分割して再計画 (`/owf:outline`) もしくは
+      ② 手動修正後に `/owf:review ./outlines/<slug>/outline.md` を再実行
+      を選択。
 
 <if trace log と実ファイルが不一致:>
 ----------------------------------------
