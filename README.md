@@ -5,14 +5,17 @@
 3フェーズのシンプルな開発ワークフロー:
 
 ```
-Phase 1: /owf:outline  → outline.md (2並列 adversarial critic loop × max 3)
-Phase 2: /owf:implement → TDD 実装
-Phase 3: /owf:review   → デュアルモード
-                         ├─ Outline Review: 2並列 critic のみ（単発・敵対的）
-                         └─ Implementation Review: /simplify + 2並列 reviewer + fixer loop × max 3 → pr.md
+Phase 1: /owf:outline
+  ├─ 1a. Outline 作成    (owf-outliner)
+  └─ 1b. Critic ループ    (owf-outline-critic × 2 並列, max 3 往復)
+Phase 2: /owf:implement
+  └─ TDD 実装             (owf-implementer — プロジェクト言語を自動検出)
+Phase 3: /owf:review      (デュアルモード、git diff から自動判別)
+  ├─ Outline Review       (owf-outline-critic × 2 並列 — 単発・pr.md なし)
+  └─ Implementation Review (/simplify → owf-reviewer × 2 並列 → owf-fixer loop max 3 → pr.md)
 ```
 
-`/owf:review` は git diff の有無から Outline Review / Implementation Review を自動判別します。
+`/owf:review` は `git diff --name-only` に `outlines/**` 以外の変更ファイルがあるかで Outline Review / Implementation Review を自動判別します。
 
 ## インストール
 
@@ -43,14 +46,23 @@ Skills はオーケストレータとして動作し、内部でエージェン�
 /owf:outline <タスク記述>
 ```
 
-**何をするか**：タスク記述から `outline.md` を生成し、敵対的 critic ループで品質を担保します。
+**何をするか**：タスク記述から `outline.md` を生成し、敵対的 critic ループで品質を担保します。内部は **1a（作成）→ 1b（レビュー）** の 2 ステップ構成です。
 
-**フロー**：
+**1a. Outline 作成**（`owf-outliner`）
 1. プロジェクト言語を自動検出（`OWF_LANG` 環境変数 > `README.md` サンプリング > デフォルト `en`）
 2. `./outlines/<slug>/outline.md` を骨子テンプレートから作成
 3. `owf-outliner` (opus, effort: xhigh) がコードベースを調査し outline を記述
-4. `owf-outline-critic` を **2体並列**で起動（Critic A: `clarity + decomposition`、Critic B: `risk + reuse`）し Verdict をマージ
-5. スコアに応じてループ継続または終了（最大3往復）
+
+**1b. Critic ループ**（`owf-outline-critic` × 2 並列）
+4. `owf-outline-critic` を **2体並列**で起動
+   - **Critic A**: `axis_focus: ["clarity", "decomposition"]`（構造観点、0–50点）
+   - **Critic B**: `axis_focus: ["risk", "reuse"]`（文脈観点、0–50点）
+5. orchestrator が 2 体の partial Verdict をマージ（Dimensions 結合、score 加算 → 0–100、Findings dedupe、band 算出）
+6. バンド判定で分岐：
+   - 🟢 GREEN (≥80) → 終了、`## Remaining Risks` を追記
+   - 🟡 YELLOW (75–79) → ループ停止、`outline-pr.md` 生成 → ユーザー確認
+   - 🔴 RED (<75) → **1a に戻り** `owf-outliner` が指摘セクションのみ修正（Mode B）→ **1b を再実行**
+7. 最大 3 往復。上限到達時は `## Score Improvement Suggestions` を追記して停止
 
 **スコア分岐**：
 | スコア | バンド | アクション |
@@ -261,15 +273,36 @@ to: owf-outliner / sections: [...]
 
 **役割**：`outline.md` に従い RED→GREEN→REFACTOR サイクルで実装します。TDD ロジックを自身のプロンプトに内包しており、外部の tdd-guide agent には依存しません。
 
-**実装規約（常に適用）**：
-- TypeScript: `Pick<T>` / `Omit<T>` / `Record<K,V>` を使い型の重複定義を避ける
-- エラー処理: `Result<T, E>` パターン（try-catch 禁止）
-- 不変性: オブジェクトを直接変更せず新しいオブジェクトを返す
-- ファイルサイズ: 200–400行が目安、800行を超えたら分割
-- ファイル命名: ケバブケース（`user-card.tsx`、`use-debounce.ts`）
-- `console.log` / ハードコードされたシークレット禁止
+**言語・規約の自動検出（TypeScript を前提としない）**：
 
-**完了条件**：テスト全 pass + 型チェッククリーン + カバレッジ ≥ 80%
+実装開始前に必ずプロジェクトの言語と規約を検出します。
+
+1. **言語判定**（manifest ファイルで first-match-wins）
+   - `package.json` → TS/JS、`Cargo.toml` → Rust、`go.mod` → Go、`pyproject.toml` / `requirements.txt` → Python、`pom.xml` / `build.gradle*` → Java/Kotlin、`Gemfile` → Ruby、`composer.json` → PHP、`*.csproj` → C#、`Package.swift` → Swift、`mix.exs` → Elixir、など
+2. **規約ソースを読み込み**（存在するものすべて）
+   - `./CLAUDE.md`、`./.claude/CLAUDE.md`
+   - `./.claude/rules/**/*.md`（プロジェクトスコープのルール）
+   - `~/.claude/rules/common/*.md` + `~/.claude/rules/<lang>/*.md`（ユーザースコープ、`everything-claude-code` 形式の rules がインストールされていれば参照）
+   - 周辺ファイル（命名・エラーハンドリング・型定義の既存パターン）
+3. **優先順位**（特定度が高い方が勝つ）
+   outline.md > プロジェクト CLAUDE.md > プロジェクト `.claude/rules/` > ユーザースコープ `<lang>/` > ユーザースコープ `common/` > 言語イディオムのデフォルト
+
+**コード品質 — 言語非依存の原則（常に適用）**：
+
+以下は普遍原則で、言語固有のイディオムと衝突した場合はイディオム側が勝ちます（例：Go のポインタレシーバ、Rust の `Result<T, E>`、Python の `raise`/`except`）。
+
+- **KISS / DRY / YAGNI** — 最小の解、実在する重複のみ抽出、必要になるまで作らない
+- **ファイルサイズ**：目安 200–400行、上限 800行（プロジェクトの CLAUDE.md で上書き可）
+- **関数サイズ**：目安 <50行、ネスト深さ ≤4 レベル（早期 return を活用）
+- **型/モデルの SSoT**：重複定義せず言語の機能で派生（TS `Pick`/`Omit`、Python `TypedDict`、Rust 構造体再利用、など）
+- **不変性をデフォルトに**：言語イディオムが許す範囲で（Go のポインタレシーバなどは除外）
+- **明示的なエラーハンドリング**：言語の慣用形に従う — 例外（Python/Java）、error 返却（Go）、`Result<T, E>`（Rust）、プロジェクトの既存パターン（TS）。**エラーを握り潰さない**
+- **境界での入力検証**：外部入力（ユーザー、API、ファイル）をスキーマベースで検証（Zod、Pydantic、validator、Bean Validation など）
+- **本番コードにデバッグ出力を残さない**：`console.log` / `println!` / `print()` / `System.out.println` を禁止、プロジェクトのロガーを使用
+- **シークレットをハードコードしない**：環境変数 or シークレットマネージャーのみ
+- **命名は言語慣用に従う**：周辺ファイルの既存パターンに一致させる（TS 変数 camelCase、Rust/Python snake_case、Go/TS 型 PascalCase、TS/JS ファイル名は既存プロジェクトの規約を踏襲）
+
+**完了条件**：プロジェクトのツールチェーンで テスト全 pass + 静的/型チェッククリーン + カバレッジ ≥ 80%（プロジェクトが別閾値を指定していればそれに従う）
 
 ---
 
@@ -289,11 +322,13 @@ to: owf-outliner / sections: [...]
 - orchestrator が両方の partial Verdict をマージして最終スコア（0–100）を算出。
 - `@owf-reviewer` として単体起動する場合は `axis_focus` なしで全4軸（0–100）を採点。
 
-**採点軸（各 25 点）**：
+**採点軸（各 25 点・言語非依存）**：
 - `fidelity` — outline の全完了条件が実装されているか、スコープ逸脱はないか
 - `tests` — TDD が守られているか、全テストが pass するか、カバレッジ ≥ 80% か
-- `simplify` — 再利用性・品質・効率（重複コード、ファイルサイズ、不変性、Result パターン、未使用 import）
-- `maintain` — 命名・ファイル分割・コーディング規約（immutability、型定義 SSoT、入力バリデーション）
+- `simplify` — 再利用性・品質・効率（重複コード・ファイルサイズ・ネスト深さ・不変性・**プロジェクト既存のエラーハンドリング慣用形との整合**・デバッグ出力の残留・未使用コード）
+- `maintain` — 命名・ファイル分割・コーディング規約（**プロジェクトの言語慣用に従った命名**、型/モデル SSoT、境界での入力バリデーション）
+
+> 採点時は `owf-implementer` と同じ規約ソース（プロジェクト `CLAUDE.md` / `.claude/rules/` / `~/.claude/rules/<lang>/`）を参照し、プロジェクトが採用していないパターン（例: `Result<T, E>` を使わないプロジェクトでの強制）は減点しません。
 
 **厳格ルール**：
 - 完了条件が1つでも未実装: `fidelity` ≤ 15/25 確定
@@ -318,13 +353,105 @@ to: owf-outliner / sections: [...]
 - `[MED]` — 基本修正（スコープ拡張が不要なもの）
 - `[LOW]` — 軽微なら修正、スキップ時は理由を報告
 
-**simplify 観点を修正時に適用**（2回目以降のイテレーション）：
+**simplify 観点を修正時に適用**（2回目以降のイテレーション、言語非依存）：
 - 修正するファイルで見つけた重複コード・型定義をついでに整理
-- 800行を超えたファイルは分割
-- 触れたコードの try-catch を Result パターンに変換
+- プロジェクトの上限を超えたファイルを分割（デフォルト 800 行、CLAUDE.md で上書き可）
+- 触れたコードのエラーハンドリングを**プロジェクト既存の慣用形**に揃える（try-catch ↔ Result ↔ error 返却などを**勝手に**切り替えない）
+- 触れたコードのデバッグ出力（`console.log` / `println!` / `print()` / `System.out.println` 等）を除去
 - ※ 初回（iter=0）は `/simplify` skill による前処理が実施済みのため、機械的整理は既に完了
 
-**完了条件**：修正後に全テスト pass + 型チェッククリーン を確認してから報告
+**言語検出と規約ソース**：`owf-implementer` と同じ手順（manifest から言語判定 → `CLAUDE.md` / `.claude/rules/` / `~/.claude/rules/<lang>/` を参照）でプロジェクト規約に従います。
+
+**完了条件**：プロジェクトのツールチェーンで 修正後に全テスト pass + 静的/型チェッククリーン を確認してから報告
+
+---
+
+## エージェント直接利用ワークフロー（skill を使わず `@agent` だけで運用する）
+
+スキル（`/owf:*`）のオーケストレーションを使わず、各エージェントを `@` プレフィックスで**直接**呼び出して手動で 3 フェーズを回すこともできます。ループの途中にレビュアーを挟みたい、1 フェーズだけ再実行したい、CI から個別に起動したい、などのユースケース向けです。
+
+### Phase 1 — Outline 作成＋critic を手動で回す
+
+```
+# 1a. 初回の outline を書かせる
+@owf-outliner
+task: <タスク記述>
+lang: ja   # 省略可。未指定時は owf-outliner が検出
+write_to: ./outlines/<slug>/outline.md
+
+# 1b. critic を 2 体並列で起動（1 つのメッセージ内に 2 ブロック）
+@owf-outline-critic
+axis_focus: ["clarity", "decomposition"]
+iteration: 1/3
+outline: ./outlines/<slug>/outline.md
+
+@owf-outline-critic
+axis_focus: ["risk", "reuse"]
+iteration: 1/3
+outline: ./outlines/<slug>/outline.md
+
+# → 2 体の partial Verdict（各 0–50）を自分でマージして 0–100 に合算
+# → RED (<75) なら Findings を渡して owf-outliner を Mode B で再起動
+@owf-outliner
+mode: revision
+findings: <critic Verdict の Findings を貼り付け>
+sections: <Routing の sections を貼り付け>
+outline: ./outlines/<slug>/outline.md
+```
+
+### Phase 2 — 実装を直接起動
+
+```
+@owf-implementer
+outline: ./outlines/<slug>/outline.md
+# owf-implementer がプロジェクト言語・規約を自動検出して TDD を回す
+```
+
+独立 feature が複数あれば、同じ 1 メッセージで `@owf-implementer` を複数ブロック並列起動し、各ブロックで担当ステップ範囲を指定します。
+
+### Phase 3 — レビュー＋修正を手動ループ
+
+```
+# Outline Review だけしたい（実装 diff がない場合）
+@owf-outline-critic
+axis_focus: ["clarity", "decomposition"]
+outline: ./outlines/<slug>/outline.md
+
+@owf-outline-critic
+axis_focus: ["risk", "reuse"]
+outline: ./outlines/<slug>/outline.md
+
+# Implementation Review（実装 diff がある場合）— 2 体並列 reviewer
+@owf-reviewer
+axis_focus: ["fidelity", "tests"]
+iteration: 1/3
+outline: ./outlines/<slug>/outline.md
+diff: <git diff の結果>
+
+@owf-reviewer
+axis_focus: ["simplify", "maintain"]
+iteration: 1/3
+outline: ./outlines/<slug>/outline.md
+diff: <git diff の結果>
+
+# → マージ後 RED なら fixer を起動
+@owf-fixer
+findings: <merged Verdict の Findings>
+files: <Routing の files 和集合>
+# → 完了後に reviewer 2 体並列を再実行（max 3 往復）
+```
+
+### skill と直接利用の比較
+
+| 観点 | `/owf:*` skill 経由 | `@owf-*` 直接利用 |
+|---|---|---|
+| オーケストレーション | 自動（並列 spawn / Verdict マージ / ループ判定 / pr.md 生成） | 手動 |
+| `/simplify` 前処理 | Phase 3 Implementation Review の初回で自動実行 | 手動で起動する必要あり |
+| スコアマージ | orchestrator が自動で 0–50 × 2 → 0–100 計算 | 手動で合算（Dimensions 結合 / Findings dedupe） |
+| ループ制御 | 最大3イテレーションの自動管理 | 自分で反復判定 |
+| 向いている用途 | 通常の開発フロー | CI 連携 / 1 フェーズだけ再実行 / 途中介入 / デバッグ |
+
+両者は併用可能です（例：skill で Phase 1–2 を回して、Phase 3 だけ手動 `@owf-reviewer` で細かく制御）。
 
 ---
 
