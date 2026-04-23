@@ -258,3 +258,20 @@ OWF Implementation Review: ./outlines/<slug>/outline.md
 - If OWF_TRACE=1 is set in environment, append one line to `./outlines/<slug>/.owf-trace.log`:
   - Outline Review: `<ISO timestamp> | review-outline | score=<N> | band=<BAND> | <slug>`
   - Implementation Review: `<ISO timestamp> | review-impl | iter=<N> | score=<N> | band=<BAND> | <slug>`
+
+## Terminology constraint (CRITICAL — prevents hallucinated commands)
+
+When generating any user-facing chat output (Step 3-O final output, Step 7-I final output, any intermediate status message):
+
+- **NEVER** suggest `/owf:<agent-name>` style commands. Agents (`owf-outliner`, `owf-outline-critic`, `owf-implementer`, `owf-reviewer`, `owf-fixer`) are NOT slash commands. Writing `/owf:owf-outline-critic`, `/owf:owf-reviewer`, `/owf:owf-fixer`, etc. is a hallucination — those commands do not exist and will fail with "Unknown command".
+- **Valid OWF slash commands**, the only ones that may appear after `/`:
+  - `/owf:outline`
+  - `/owf:implement`
+  - `/owf:review`
+  - `/owf:rubric`
+- When referring to agents in chat output, **always use `@agent-name` prefix** (e.g., `@owf-outline-critic`, `@owf-reviewer`, `@owf-fixer`). The `@` form is how a user invokes an agent directly; the `/owf:` form is reserved for the four skills listed above.
+- If the user asks "how do I re-run the critic / reviewer / fixer", the correct answers are:
+  1. Re-run the whole review: `/owf:review ./outlines/<slug>/outline.md`
+  2. Agent-only route: `@owf-outline-critic` / `@owf-reviewer` / `@owf-fixer` with the needed inputs in the prompt.
+
+This rule overrides any pattern-completion instinct that might produce `/owf:<agent>`.

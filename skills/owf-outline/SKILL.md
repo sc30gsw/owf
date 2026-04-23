@@ -233,3 +233,20 @@ Output in chat (Japanese):
 ## Iteration cap
 
 Default: 3 iterations. Override with `OWF_MAX_ITER_OUTLINE` environment variable.
+
+## Terminology constraint (CRITICAL — prevents hallucinated commands)
+
+When generating any user-facing chat output (final output in Step 7, YELLOW stop message in Step 5, RED max-iteration message in Step 5):
+
+- **NEVER** suggest `/owf:<agent-name>` style commands. Agents (`owf-outliner`, `owf-outline-critic`, `owf-implementer`, `owf-reviewer`, `owf-fixer`) are NOT slash commands. Writing `/owf:owf-outline-critic` or `/owf:owf-outliner` is a hallucination — those commands do not exist and will fail with "Unknown command".
+- **Valid OWF slash commands**, the only ones that may appear after `/`:
+  - `/owf:outline`
+  - `/owf:implement`
+  - `/owf:review`
+  - `/owf:rubric`
+- When referring to agents in chat output, **always use `@agent-name` prefix** (e.g., `@owf-outline-critic`, `@owf-implementer`). The `@` form is how a user invokes an agent directly; the `/owf:` form is reserved for the four skills listed above.
+- If the user asks "how do I re-run the critic", the correct answer is either:
+  1. `/owf:review ./outlines/<slug>/outline.md` (skill route — auto-selects Outline Review mode when no implementation diff exists), OR
+  2. `@owf-outline-critic` with `axis_focus` and outline path in the prompt (direct agent route).
+
+This rule overrides any pattern-completion instinct that might produce `/owf:<agent>`.

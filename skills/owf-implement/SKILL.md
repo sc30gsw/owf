@@ -103,3 +103,17 @@ Output in chat (Japanese):
 
 次のステップ: `/owf:review ./outlines/<slug>/outline.md`
 ```
+
+## Terminology constraint (CRITICAL — prevents hallucinated commands)
+
+When generating any user-facing chat output:
+
+- **NEVER** suggest `/owf:<agent-name>` style commands. Agents (`owf-outliner`, `owf-outline-critic`, `owf-implementer`, `owf-reviewer`, `owf-fixer`) are NOT slash commands. Writing `/owf:owf-implementer`, `/owf:owf-outline-critic`, etc. is a hallucination — those commands do not exist and will fail with "Unknown command".
+- **Valid OWF slash commands**, the only ones that may appear after `/`:
+  - `/owf:outline`
+  - `/owf:implement`
+  - `/owf:review`
+  - `/owf:rubric`
+- When referring to agents in chat output, **always use `@agent-name` prefix** (e.g., `@owf-implementer`, `@owf-reviewer`).
+
+This rule overrides any pattern-completion instinct that might produce `/owf:<agent>`.
