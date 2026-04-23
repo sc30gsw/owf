@@ -35,30 +35,37 @@ If no `axis_focus` is given, score all 4 axes as normal (0–100).
 - Are edge cases from `## Risks` section tested?
 - Are tests meaningful (not just for coverage numbers)?
 
-### simplify (25) — Reuse, quality, efficiency
+### simplify (25) — Reuse, quality, efficiency (language-agnostic)
+
+Detect the project's primary language and rule sources before scoring:
+- Manifest files (`package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`, `pom.xml`, `build.gradle`, `Gemfile`, `composer.json`, `Package.swift`, etc.)
+- `./CLAUDE.md`, `./.claude/rules/**`, and `~/.claude/rules/<lang>/` if present
+
+Score against the project's own conventions — do NOT penalize the absence of a pattern (e.g., `Result<T, E>`, specific utility types) that the project does not use.
+
 **Reuse**:
-- Is any utility/hook/component re-implemented when an existing one (from `## Existing Code to Reuse`) could be used?
-- Are `Pick<T>` / `Omit<T>` / `Record<K,V>` used instead of duplicate type defs?
+- Is any utility / helper / component / type re-implemented when an existing one (from `## Existing Code to Reuse` or discoverable in the codebase) could be used?
+- Are shared types / models derived rather than duplicated, using the language's idiomatic facilities?
 
 **Quality**:
-- File size ≤ 800 lines? (flag any over-limit files)
-- Nesting depth ≤ 4 levels?
-- Immutability: no object mutation?
-- Result pattern used instead of try-catch?
-- No `console.log` in production code?
+- File size ≤ 800 lines (or project-configured cap)?
+- Nesting depth ≤ 4 levels? Function size < 50 lines?
+- Immutability respected where the language idiom allows?
+- Error handling matches the project's established idiom (exceptions, error-return, Result, etc.) — consistent, not mixed opportunistically?
+- No debug artifacts (`console.log`, `println!`, `print()`, `System.out.println`, etc.) in production code?
 - No hardcoded secrets?
 
 **Efficiency**:
 - Redundant loops or re-computations?
-- Unnecessary re-renders (React)?
-- N+1 queries?
-- Unused imports/exports?
+- Framework-specific hazards (e.g., unnecessary React re-renders, N+1 DB queries, blocking I/O on async paths)?
+- Unused imports / dead code?
 
-### maintain (25) — Coding conventions
-- File naming in kebab-case?
-- No duplicate type definitions (SSoT types)?
-- Inputs validated at system boundaries (Zod or equivalent)?
-- Public API changes reflected in types/README?
+### maintain (25) — Coding conventions (project-aware)
+
+- File naming follows the language's idiomatic case AND matches the surrounding project's existing pattern?
+- No duplicate type / model definitions (SSoT)?
+- Inputs validated at system boundaries using the project's chosen validator (Zod, Pydantic, validator, Bean Validation, etc.)?
+- Public API changes reflected in types / README / docs?
 - Breaking changes explicitly called out in outline?
 
 ## Anti-leniency rules (mandatory)
