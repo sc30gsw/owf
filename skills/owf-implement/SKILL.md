@@ -15,19 +15,27 @@ description: Phase 2 — Implement a development task from outline.md using TDD.
 
 ### Step 0 — Detect output language
 
-Determine the language for all user-facing chat output:
+Determine `DETECTED_LANG` by evaluating signals in priority order (first confident match wins):
 
-1. Check environment variable `OWF_LANG` (e.g., `ja`, `en`, `zh`). If set, use it directly.
-2. Otherwise sample the project README:
-   ```bash
-   head -30 README.md 2>/dev/null || head -30 readme.md 2>/dev/null || echo ""
-   ```
-   - Contains Japanese characters (hiragana/katakana/kanji, Unicode `\\u3040-\\u9FFF`) → `ja`
-   - Predominantly other CJK characters → `zh`
-   - Otherwise → `en`
-3. No README → default to `en`.
+**Priority 1 — Explicit override**: `OWF_LANG` env var (e.g., `ja`, `en`, `zh`, `ko`, `de`, `fr`, `es`). If set, use verbatim.
 
-Store as `DETECTED_LANG`. **Output skeletons in this skill show English labels as the canonical reference.** Translate every label and narrative line into `DETECTED_LANG`, and keep unchanged regardless of language: markdown structure, file paths, slash commands, `@agent-name` references, shell commands, and score/band tokens.
+**Priority 2 — User conversation language**: Inspect the user's most recent prompt / active conversation turn. If the user is clearly writing in a specific language, use that. This is the strongest real-time signal — English code with Korean narrative still indicates Korean.
+
+**Priority 3 — Project signals (aggregated)**:
+```bash
+{
+  head -30 README.md 2>/dev/null
+  head -30 readme.md 2>/dev/null
+  head -30 CLAUDE.md 2>/dev/null
+  cat .github/ISSUE_TEMPLATE/*.md 2>/dev/null | head -30
+  git log --oneline -50 2>/dev/null
+} 2>/dev/null | head -200
+```
+Identify the dominant language. Supported: `ja` (hiragana/katakana), `zh` (CJK ideographs, no kana), `ko` (hangul U+AC00–U+D7AF), `de` (`ä ö ü ß` + `der die das und`), `fr` (`à â ç é è ê` + `le la les de des`), `es` (`ñ ¿ ¡ á é í ó ú` + `el la los las`), `en` (predominantly ASCII, no dominant marker).
+
+**Priority 4 — Fallback**: `en`.
+
+Store as `DETECTED_LANG`. **Output skeletons in this skill show English labels as the canonical reference.** Translate every label and narrative line into `DETECTED_LANG`, and keep unchanged: markdown structure, file paths, slash commands, `@agent-name` references, shell commands, and score/band tokens.
 
 ### Step 1 — Read and validate outline.md
 

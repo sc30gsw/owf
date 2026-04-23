@@ -20,19 +20,44 @@ Example:
 
 Execute the following steps in order. Do not skip steps.
 
-### Step 0 — Detect project language
+### Step 0 — Detect output language
 
-Determine the language to use for all outline.md text (section headers, content, placeholder comments):
+Determine `DETECTED_LANG` by evaluating the following signals in priority order (first confident match wins):
 
-1. Check environment variable `OWF_LANG` (e.g., `ja`, `en`, `zh`). If set, use it directly.
-2. Otherwise, sample the project README:
-   ```bash
-   head -30 README.md 2>/dev/null || head -30 readme.md 2>/dev/null || echo ""
-   ```
-   If the output contains Japanese characters (hiragana/katakana/kanji — Unicode range \\u3040–\\u9FFF), use `ja`.
-   If it contains predominantly CJK characters of another type, use `zh`.
-   Otherwise, use `en`.
-3. If no README exists: default to `en`.
+**Priority 1 — Explicit override**
+If `OWF_LANG` environment variable is set (e.g., `ja`, `en`, `zh`, `ko`, `de`, `fr`, `es`), use it verbatim and skip all further detection.
+
+**Priority 2 — User conversation language**
+Inspect the user's most recent prompt / the active conversation turn. If the user is clearly writing in a specific natural language, use that as `DETECTED_LANG`. This is the strongest real-time signal — someone chatting in Korean wants Korean output even if the project's README is in English. Treat mixed-language prompts where technical terms / code are in English as still indicating the non-English language.
+
+**Priority 3 — Project signals (aggregated)**
+Sample multiple project artefacts and identify the dominant natural language across all of them:
+```bash
+{
+  head -30 README.md 2>/dev/null
+  head -30 readme.md 2>/dev/null
+  head -30 CLAUDE.md 2>/dev/null
+  cat .github/ISSUE_TEMPLATE/*.md 2>/dev/null | head -30
+  git log --oneline -50 2>/dev/null
+} 2>/dev/null | head -200
+```
+
+Identify the dominant language using these signals (supported codes):
+
+| Code | Language | Detection hint |
+|---|---|---|
+| `ja` | Japanese | Hiragana/Katakana (U+3040–U+30FF) present |
+| `zh` | Chinese | CJK ideographs (U+4E00–U+9FFF) dominant, no kana |
+| `ko` | Korean | Hangul (U+AC00–U+D7AF) present |
+| `de` | German | Frequent `ä ö ü ß` and common words (`der die das und nicht ist`) |
+| `fr` | French | Frequent `à â ç é è ê ë î ï ô ù û` and common words (`le la les de des un une est`) |
+| `es` | Spanish | Frequent `ñ ¿ ¡ á é í ó ú` and common words (`el la los las de un una es`) |
+| `en` | English | Predominantly ASCII with no dominant marker above |
+
+Pick the language with the strongest signal across the aggregated sample. Ignore isolated tokens (e.g., a single Japanese word in an otherwise English README does not make it `ja`).
+
+**Priority 4 — Fallback**
+If no confident signal: default to `en`.
 
 Store the result as `DETECTED_LANG` and pass it to every agent invocation in subsequent steps. **All "Output in chat" skeletons below show English labels as the canonical reference** — translate labels and narrative into `DETECTED_LANG`, and keep unchanged: markdown structure, file paths, slash commands, `@agent-name` references, shell commands, and score/band tokens (GREEN / YELLOW / RED / 🟢🟡🔴).
 
