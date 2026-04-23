@@ -22,6 +22,22 @@ This skill has **two clearly separated modes**:
 
 ## Execution steps
 
+### Step 0 — Detect output language
+
+Determine the language for all user-facing chat output:
+
+1. Check environment variable `OWF_LANG` (e.g., `ja`, `en`, `zh`). If set, use it directly.
+2. Otherwise sample the project README:
+   ```bash
+   head -30 README.md 2>/dev/null || head -30 readme.md 2>/dev/null || echo ""
+   ```
+   - Contains Japanese characters (hiragana/katakana/kanji, Unicode `\\u3040-\\u9FFF`) → `ja`
+   - Predominantly other CJK characters → `zh`
+   - Otherwise → `en`
+3. No README → default to `en`.
+
+Store as `DETECTED_LANG`. **Output skeletons in this skill show English labels as the canonical reference.** Translate every label and narrative line into `DETECTED_LANG`, and keep unchanged: markdown structure, file paths, slash commands, `@agent-name` references, shell commands, and score/band tokens (GREEN / YELLOW / RED / 🟢🟡🔴).
+
 ### Step 1 — Gather context and detect review mode
 
 Read `./outlines/<slug>/outline.md`.
@@ -42,9 +58,9 @@ git diff --name-only main...HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD
 - Else if the modified-files list (excluding `outlines/**`) is empty → **Outline Review mode**
 - Otherwise → **Implementation Review mode**
 
-Announce the detected mode in chat (Japanese):
+Announce the detected mode in chat (in `DETECTED_LANG`):
 ```
-検出されたレビューモード: <Outline Review | Implementation Review>
+Detected review mode: <Outline Review | Implementation Review>
 ```
 
 Then branch: Outline Review → Step 2-O → Step 3-O → final output.
@@ -79,28 +95,28 @@ Wait for **both** critics to return partial Verdict blocks.
 4. Routing sections: union.
 5. Band: derive from merged score (GREEN ≥80, YELLOW 75–79, RED <75).
 
-Output in chat (Japanese):
+Output in chat (in `DETECTED_LANG` — canonical English skeleton):
 ```
 ========================================
 OWF Outline Review: ./outlines/<slug>/outline.md
 ========================================
-スコア: <N> / 100
-バンド: 🟢 GREEN | 🟡 YELLOW | 🔴 RED
+Score: <N> / 100
+Band: 🟢 GREEN | 🟡 YELLOW | 🔴 RED
 ----------------------------------------
-評価の根拠:
+Rationale:
   clarity        <N>/25: <one-line>
   decomposition  <N>/25: <one-line>
   risk           <N>/25: <one-line>
   reuse          <N>/25: <one-line>
 ----------------------------------------
-指摘事項:
+Findings:
   [HIGH] ...
   [MED] ...
   [LOW] ...
 ----------------------------------------
-次のアクション:
-  <if GREEN>: このまま `/owf:implement` に進めます。
-  <if YELLOW/RED>: `/owf:outline` を再実行して critic ループで outline を改善してください。
+Next action:
+  <if GREEN>: proceed to `/owf:implement`.
+  <if YELLOW/RED>: re-run `/owf:outline` to improve the outline via the critic loop.
 ========================================
 ```
 
@@ -218,33 +234,33 @@ If score < 100: append `## Remaining Risks` or `## Next Action Proposals` (from 
 
 ### Step 7-I — Final CLI output
 
-Output in chat (Japanese):
+Output in chat (in `DETECTED_LANG` — canonical English skeleton):
 
 ```
 ========================================
 OWF Implementation Review: ./outlines/<slug>/outline.md
 ========================================
-スコア: <N> / 100
-バンド: 🟢 GREEN | 🟡 YELLOW | 🔴 RED
-イテレーション: <N> / <MAX>
+Score: <N> / 100
+Band: 🟢 GREEN | 🟡 YELLOW | 🔴 RED
+Iteration: <N> / <MAX>
 ----------------------------------------
-評価の根拠:
+Rationale:
   fidelity   <N>/25: <one-line>
   tests      <N>/25: <one-line>
   simplify   <N>/25: <one-line>
   maintain   <N>/25: <one-line>
 ----------------------------------------
 <if GREEN or YELLOW:>
-次のアクション:
-  1. pr.md を確認してください: ./outlines/<slug>/pr.md
-  2. コミット後に PR を作成: gh pr create --body-file ./outlines/<slug>/pr.md
+Next action:
+  1. Review pr.md: ./outlines/<slug>/pr.md
+  2. After committing, open the PR: gh pr create --body-file ./outlines/<slug>/pr.md
 <if any LOW findings remain:>
-  3. 任意の改善: <brief list of LOW findings>
+  3. Optional improvements: <brief list of LOW findings>
 
 <if RED:>
-次のアクション:
-  - 未解決の指摘事項を outline.md の `## Next Action Proposals` に記載しました。
-  - outline を分割するか、手動で修正後、再度 `/owf:review` を実行してください。
+Next action:
+  - Unresolved findings are recorded in pr.md's `## Next Action Proposals`.
+  - Split the outline or apply manual fixes, then re-run `/owf:review`.
 ========================================
 ```
 

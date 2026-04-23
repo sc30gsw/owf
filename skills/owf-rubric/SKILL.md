@@ -16,6 +16,22 @@ description: Display the owf scoring rubric AND the latest run's outline/impleme
 
 ## Execution steps
 
+### Step 0 — Detect output language
+
+Determine the language for all user-facing chat output:
+
+1. Check environment variable `OWF_LANG` (e.g., `ja`, `en`, `zh`). If set, use it directly.
+2. Otherwise sample the project README:
+   ```bash
+   head -30 README.md 2>/dev/null || head -30 readme.md 2>/dev/null || echo ""
+   ```
+   - Contains Japanese characters (hiragana/katakana/kanji, Unicode `\\u3040-\\u9FFF`) → `ja`
+   - Predominantly other CJK characters → `zh`
+   - Otherwise → `en`
+3. No README → default to `en`.
+
+Store as `DETECTED_LANG`. **All skeletons below show English labels as the canonical reference.** Translate every label and narrative line in the output into `DETECTED_LANG`, and keep these unchanged regardless of language: markdown structure, band tokens (GREEN / YELLOW / RED), emojis (🟢 🟡 🔴), slash commands (`/owf:outline`, `/owf:implement`, `/owf:review`, `/owf:rubric`), agent references (`@owf-*`), file paths, shell commands (`gh pr create ...`).
+
 ### Step 1 — Determine target slug
 
 ```bash
@@ -24,8 +40,8 @@ description: Display the owf scoring rubric AND the latest run's outline/impleme
 ls -1td ./outlines/*/ 2>/dev/null | head -1
 ```
 
-- No `./outlines/` at all, or no subdirs → skip Steps 2–4, print an info message `実行履歴なし（./outlines/ が存在しないか空です）` and proceed straight to Step 5.
-- Explicit slug given but `./outlines/<slug>/` missing → print `❌ ./outlines/<slug>/ が見つかりません` and proceed to Step 5.
+- No `./outlines/` at all, or no subdirs → skip Steps 2–4, print an info message `No run history (./outlines/ missing or empty)` (translated to `DETECTED_LANG`) and proceed straight to Step 5.
+- Explicit slug given but `./outlines/<slug>/` missing → print `❌ ./outlines/<slug>/ not found` (translated to `DETECTED_LANG`) and proceed to Step 5.
 
 ### Step 2 — Extract Phase 1 (Outline Review) result
 
@@ -51,7 +67,7 @@ Probe, in order, and stop at first hit:
    ```
    If `outline-pr.md` exists, note its path as the summary detail source; otherwise no summary.
 
-4. **None of the above** — Phase 1 is marked 未実行 in the output.
+4. **None of the above** — Phase 1 is marked "Not executed" in the output.
 
 Record: `phase1_score`, `phase1_band`, `phase1_iter` (if discoverable), `phase1_summary_lines[]`.
 
@@ -84,7 +100,7 @@ Read `./outlines/<slug>/pr.md` if it exists.
 
 5. **Fallback** — if `pr.md` missing, try `.owf-trace.log` last `review-impl | iter=<N> | score=<N> | band=<BAND>` line. No per-axis scores in this case.
 
-6. **None of the above** — Phase 3 marked 未実行.
+6. **None of the above** — Phase 3 marked "Not executed".
 
 Record: `phase3_score`, `phase3_band`, `phase3_iter`, `phase3_axes{fidelity,tests,simplify,maintain}`, `phase3_summary_lines[]`.
 
@@ -92,7 +108,7 @@ Record: `phase3_score`, `phase3_band`, `phase3_iter`, `phase3_axes{fidelity,test
 
 Map band → emoji: GREEN → 🟢, YELLOW → 🟡, RED → 🔴.
 
-Output in chat (Japanese) using this exact skeleton (omit empty sections, adapt to discovered data):
+Output in chat in `DETECTED_LANG` using the skeleton below (canonical English — translate labels and narrative, keep markdown structure, paths, commands, band tokens, and emojis as-is; omit empty sections):
 
 ```
 ========================================
@@ -100,50 +116,49 @@ OWF Rubric — <slug>
 ========================================
 
 ## Phase 1 — Outline Review
-<if 未実行:>
-  未実行（./outlines/<slug>/outline.md に critic 結果の痕跡なし）
+<if Not executed:>
+  Not executed (no critic trace in ./outlines/<slug>/outline.md)
 <else:>
-  スコア: <phase1_score>/100 <emoji> <BAND>  (<phase1_iter or "?">/3 イテレーション)
-  サマリ:
+  Score: <phase1_score>/100 <emoji> <BAND>  (<phase1_iter or "?">/3 iterations)
+  Summary:
     - <phase1_summary_lines[0]>
     - <phase1_summary_lines[1]>
     - <phase1_summary_lines[2]>
-  次のアクション:
+  Next action:
     <if GREEN>: `/owf:implement ./outlines/<slug>/outline.md`
-    <if YELLOW>: `./outlines/<slug>/outline-pr.md` を確認 → 問題なければ `/owf:implement ./outlines/<slug>/outline.md`
-    <if RED>: outline を分割するか `## Score Improvement Suggestions` の提案に従い修正後、`/owf:outline` を再実行
+    <if YELLOW>: review `./outlines/<slug>/outline-pr.md` — if acceptable, run `/owf:implement ./outlines/<slug>/outline.md`
+    <if RED>: split the outline, or apply the items in `## Score Improvement Suggestions` and re-run `/owf:outline`
 
 ## Phase 3 — Implementation Review
-<if 未実行:>
-  未実行（./outlines/<slug>/pr.md が存在しない）
+<if Not executed:>
+  Not executed (./outlines/<slug>/pr.md does not exist)
 <else:>
-  スコア: <phase3_score>/100 <emoji> <BAND>  (<phase3_iter>/3 イテレーション)
+  Score: <phase3_score>/100 <emoji> <BAND>  (<phase3_iter>/3 iterations)
   <if per-axis scores available:>
-  軸別:
+  Axes:
     fidelity  <N>/25  — <finding>
     tests     <N>/25  — <finding>
     simplify  <N>/25  — <finding>
     maintain  <N>/25  — <finding>
-  サマリ:
+  Summary:
     - <phase3_summary_lines[0]>
     - <phase3_summary_lines[1]>
     - <phase3_summary_lines[2]>
-  次のアクション:
+  Next action:
     <if GREEN>: `gh pr create --body-file ./outlines/<slug>/pr.md`
     <if YELLOW>:
-      自動修正ループは GREEN/YELLOW に達したため停止。pr.md の `## Remaining Risks` を確認し、
-      受容できるなら `gh pr create --body-file ./outlines/<slug>/pr.md`、
-      追加修正が必要なら手動で対応してから `/owf:review ./outlines/<slug>/outline.md` を再実行。
+      The auto-fix loop stopped on reaching GREEN/YELLOW. Review `## Remaining Risks` in pr.md.
+      If acceptable, run `gh pr create --body-file ./outlines/<slug>/pr.md`.
+      If further fixes are needed, apply them manually and re-run `/owf:review ./outlines/<slug>/outline.md`.
     <if RED>:
-      最大 3 イテレーションの自動修正でも < 75。自動修正では解決困難な構造的問題の可能性あり。
-      pr.md の `## Next Action Proposals` を確認し、
-      ① outline を分割して再計画 (`/owf:outline`) もしくは
-      ② 手動修正後に `/owf:review ./outlines/<slug>/outline.md` を再実行
-      を選択。
+      Three iterations of auto-fix still left the score < 75 — likely a structural issue the fixer cannot resolve.
+      Review `## Next Action Proposals` in pr.md, then choose one of:
+        (a) split the outline and re-plan via `/owf:outline`, or
+        (b) apply manual fixes and re-run `/owf:review ./outlines/<slug>/outline.md`.
 
-<if trace log と実ファイルが不一致:>
+<if trace log disagrees with actual files:>
 ----------------------------------------
-⚠️ 注意: `.owf-trace.log` と outline.md/pr.md の内容が一致しません。実ファイルを優先しました。
+⚠️ Note: `.owf-trace.log` disagrees with outline.md/pr.md. The actual files take precedence.
 
 ```
 
@@ -151,11 +166,11 @@ Then continue to Step 5 in the same chat message, separated by a horizontal rule
 
 ### Step 5 — Static rubric reference (always shown)
 
-Print the rubric reference below as-is:
+Print the rubric reference below. Translate only the section header `## Scoring definition (reference)` into `DETECTED_LANG`; keep the tables (axis names, thresholds) and verdict format in English — they are consumed by downstream parsers and must stay stable.
 
 ```
 ----------------------------------------
-## スコアリング定義（参考）
+## Scoring definition (reference)
 ```
 
 ## Score: 0–100 (4 axes × 25 pts each)

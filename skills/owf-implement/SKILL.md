@@ -13,6 +13,22 @@ description: Phase 2 — Implement a development task from outline.md using TDD.
 
 ## Execution steps
 
+### Step 0 — Detect output language
+
+Determine the language for all user-facing chat output:
+
+1. Check environment variable `OWF_LANG` (e.g., `ja`, `en`, `zh`). If set, use it directly.
+2. Otherwise sample the project README:
+   ```bash
+   head -30 README.md 2>/dev/null || head -30 readme.md 2>/dev/null || echo ""
+   ```
+   - Contains Japanese characters (hiragana/katakana/kanji, Unicode `\\u3040-\\u9FFF`) → `ja`
+   - Predominantly other CJK characters → `zh`
+   - Otherwise → `en`
+3. No README → default to `en`.
+
+Store as `DETECTED_LANG`. **Output skeletons in this skill show English labels as the canonical reference.** Translate every label and narrative line into `DETECTED_LANG`, and keep unchanged regardless of language: markdown structure, file paths, slash commands, `@agent-name` references, shell commands, and score/band tokens.
+
 ### Step 1 — Read and validate outline.md
 
 Read the outline.md at the given path.
@@ -22,10 +38,10 @@ Validate it has these required sections:
 - `## Steps` — contains at least one numbered step
 - `## Verification` — contains at least one check
 
-If any required section is missing or empty: stop and report in chat (Japanese):
+If any required section is missing or empty: stop and report in chat (in `DETECTED_LANG`):
 ```
-❌ outline.md が不完全です。以下のセクションが未記入です: [list]
-`/owf:outline` でアウトラインを先に完成させてください。
+❌ outline.md is incomplete. Missing/empty sections: [list]
+Run `/owf:outline` first to complete the outline.
 ```
 
 ### Step 2 — Fix the read-only constraint
@@ -90,18 +106,18 @@ If lint config found, run lint. Provide any errors to `owf-implementer` for fixe
 
 ### Step 8 — Final output
 
-Output in chat (Japanese):
+Output in chat (in `DETECTED_LANG`):
 ```
-✅ 実装完了: ./outlines/<slug>/outline.md
+✅ Implementation complete: ./outlines/<slug>/outline.md
 
-テスト: <N> pass, 0 fail
-カバレッジ: <N>%<if <80: " ⚠️ 80%未満です">
-型チェック: クリーン
-変更ファイル:
+Tests: <N> pass, 0 fail
+Coverage: <N>%<if <80: " ⚠️ below 80%">
+Type check: clean
+Changed files:
   - <file1> (<new|modified>)
   - <file2> (<new|modified>)
 
-次のステップ: `/owf:review ./outlines/<slug>/outline.md`
+Next step: `/owf:review ./outlines/<slug>/outline.md`
 ```
 
 ## Terminology constraint (CRITICAL — prevents hallucinated commands)

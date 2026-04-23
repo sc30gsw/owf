@@ -34,7 +34,7 @@ Determine the language to use for all outline.md text (section headers, content,
    Otherwise, use `en`.
 3. If no README exists: default to `en`.
 
-Store the result as `DETECTED_LANG` and pass it to every agent invocation in subsequent steps.
+Store the result as `DETECTED_LANG` and pass it to every agent invocation in subsequent steps. **All "Output in chat" skeletons below show English labels as the canonical reference** — translate labels and narrative into `DETECTED_LANG`, and keep unchanged: markdown structure, file paths, slash commands, `@agent-name` references, shell commands, and score/band tokens (GREEN / YELLOW / RED / 🟢🟡🔴).
 
 ### Step 1 — Generate feature slug
 
@@ -171,12 +171,12 @@ Parse merged `score:` and derived `band:`. Proceed to branching.
 **score ≥ 75 (YELLOW) — stop loop:**
 → Create `./outlines/<slug>/outline-pr.md` using the template at `owf/templates/outline-pr.md.tmpl` as structure.
 → Pre-fill "Questions for Reviewer" with the critic's [HIGH] and [MED] findings.
-→ Output in chat (Japanese):
+→ Output in chat (in `DETECTED_LANG` — canonical English):
 ```
 ⚠️ Outline score: <N>/100 🟡 YELLOW (iteration <N>/3)
-アウトラインのレビューを確認し、OK であれば `/owf:implement ./outlines/<slug>/outline.md` を実行してください。
-Yellow の原因: <list MED/HIGH findings in Japanese>
-詳細: ./outlines/<slug>/outline.md, ./outlines/<slug>/outline-pr.md
+Review the outline; if acceptable, run `/owf:implement ./outlines/<slug>/outline.md`.
+Reason for YELLOW: <list MED/HIGH findings>
+Details: ./outlines/<slug>/outline.md, ./outlines/<slug>/outline-pr.md
 ```
 → Stop.
 
@@ -203,12 +203,12 @@ The following suggestions may help resolve remaining issues:
 - **Reference existing implementation**: Similar pattern already exists at [file path] — use it as a template.
 - **Clarify requirement**: "[ambiguous criteria]" needs a concrete definition. Discuss with stakeholders before implementing.
 ```
-→ Output in chat (Japanese):
+→ Output in chat (in `DETECTED_LANG` — canonical English):
 ```
-❌ Outline score: <N>/100 🔴 RED (3/3 イテレーション完了)
-最大イテレーション数に達しました。改善提案を outline.md に追記しました。
-確認後、タスクを分割するか、提案に従って outline を更新してください。
-詳細: ./outlines/<slug>/outline.md
+❌ Outline score: <N>/100 🔴 RED (3/3 iterations reached)
+Maximum iterations reached. Improvement suggestions have been appended to outline.md.
+Review them, then either split the task or update the outline per the suggestions.
+Details: ./outlines/<slug>/outline.md
 ```
 → Stop.
 
@@ -216,18 +216,18 @@ The following suggestions may help resolve remaining issues:
 
 ### Step 7 — Final output (GREEN or 100)
 
-Output in chat (Japanese):
+Output in chat (in `DETECTED_LANG` — canonical English):
 ```
-✅ Outline 完成: ./outlines/<slug>/outline.md
-スコア: <N>/100 🟢 GREEN (<N> イテレーション)
+✅ Outline ready: ./outlines/<slug>/outline.md
+Score: <N>/100 🟢 GREEN (<N> iterations)
 
 <if score < 100:>
-残リスク・未充足点は outline.md の末尾 "## Remaining Risks" を確認してください。
+Remaining risks / unresolved points are listed at the end of outline.md under "## Remaining Risks".
 
-次のステップ:
-- outline.md を確認してください
-- 問題なければ: `/owf:implement ./outlines/<slug>/outline.md`
-- エージェントに直接依頼する場合: `@owf-implementer` に outline.md のパスを渡してください
+Next steps:
+- Review outline.md
+- If acceptable: `/owf:implement ./outlines/<slug>/outline.md`
+- Direct agent route: invoke `@owf-implementer` with the outline.md path
 ```
 
 ## Iteration cap
