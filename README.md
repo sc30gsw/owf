@@ -185,13 +185,70 @@ OWF Outline Review: ./outlines/add-debounce/outline.md
 
 ---
 
-### `/owf:rubric` — スコアリング詳細表示
+### `/owf:rubric` — スコアリング詳細 + 実行結果サマリ
 
 ```
-/owf:rubric
+/owf:rubric [<slug>]
 ```
 
-**何をするか**：OWF のスコアリング規約（4軸×25点、RYG バンド、Verdict フォーマット）を表示します。レビュー結果の根拠を確認したい時に使います。
+**何をするか**：指定された slug（引数省略時は `./outlines/` 配下の mtime 最新）について、**Phase 1 (Outline Review) と Phase 3 (Implementation Review) の実行結果サマリ**（スコア / バンド / 軸別 / 次アクション）を表示したうえで、**静的なスコアリング定義**（4 軸×25点、RYG バンド、Verdict フォーマット）を続けて表示します。
+
+**データ取得元**（存在するものを優先順に利用）：
+- Phase 1: `./outlines/<slug>/outline.md` 末尾の HTML コメント → `.owf-trace.log` → 「未実行」
+- Phase 3: `./outlines/<slug>/pr.md` ヘッダ / Review Score テーブル / Next Action Proposals → `.owf-trace.log` → 「未実行」
+
+**出力例**（Phase 1 GREEN、Phase 3 未実行）：
+```
+========================================
+OWF Rubric — add-debounce-search
+========================================
+
+## Phase 1 — Outline Review
+スコア: 87/100 🟢 GREEN  (2/3 イテレーション)
+サマリ:
+  - [LOW] ## Out of Scope: 英語と日本語が混在
+次のアクション:
+  `/owf:implement ./outlines/add-debounce-search/outline.md`
+
+## Phase 3 — Implementation Review
+未実行（./outlines/add-debounce-search/pr.md が存在しない）
+
+----------------------------------------
+## スコアリング定義（参考）
+...（4軸×25点、RYG バンド、Verdict フォーマット、iteration cap）
+========================================
+```
+
+**出力例**（両フェーズ完了、GREEN）：
+```
+========================================
+OWF Rubric — add-debounce-search
+========================================
+
+## Phase 1 — Outline Review
+スコア: 87/100 🟢 GREEN  (2/3 イテレーション)
+サマリ:
+  - [LOW] ## Out of Scope: 英語と日本語が混在
+次のアクション:
+  `/owf:implement ./outlines/add-debounce-search/outline.md`
+
+## Phase 3 — Implementation Review
+スコア: 89/100 🟢 GREEN  (1/3 イテレーション)
+軸別:
+  fidelity  23/25  — outline 全項目と整合
+  tests     23/25  — coverage 84%
+  simplify  22/25  — 重複 util を統合済み
+  maintain  21/25  — user-list.tsx が 340 行（閾値内）
+サマリ:
+  - [LOW] src/features/user/hooks/use-debounce.ts:12 — 型引数名を `T` に短縮可
+次のアクション:
+  `gh pr create --body-file ./outlines/add-debounce-search/pr.md`
+
+----------------------------------------
+## スコアリング定義（参考）
+...
+========================================
+```
 
 ---
 
